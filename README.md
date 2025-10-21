@@ -1,5 +1,8 @@
 ![Open-Audio TTS OG Image](public/og-image.png)
 
+[![](https://dcbadge.limes.pink/api/server/https://discord.gg/4fZ4mjD3)](https://discord.gg/4fZ4mjD3)
+
+
 Check out the live website: [OpenAudio.ai](https://openaudio.ai)
 
 
