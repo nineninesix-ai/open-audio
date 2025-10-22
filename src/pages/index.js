@@ -24,17 +24,23 @@ import { saveAs } from "file-saver"; // You will need to install file-saver: npm
 
 export default function Home() {
   const [apiUrlInput, setApiUrl] = useState("http://localhost:8000");
-
-  const [stream_format, setStreamFormat] = useState("sse");
+  const [streaming, setStreaming] = useState(true);
   const [inputText, setInputText] = useState("");
-  const [voice, setVoice] = useState("random");
+  const [voice, setVoice] = useState("andrew");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [streamingProgress, setStreamingProgress] = useState(null);
-  const [usageStats, setUsageStats] = useState(null);
   const audioRef = useRef(null);
   const audioContextRef = useRef(null);
   const nextStartTimeRef = useRef(0);
+
+  const longText = `Shanghai is a direct-administered municipality and the most populous urban area in China.
+    The city is located on the southern estuary of the Yangtze River, with the Huangpu River flowing through it.
+    With a population of over 24 million as of 2019, it is the most populous city proper in the world.
+    Shanghai is a global center for finance, innovation and transportation, and the Port of Shanghai is the world's busiest container port.
+    Originally a fishing village and market town, Shanghai grew in importance in the 19th century due to its favorable port location and as one of the cities opened to foreign trade by the Treaty of Nanking.
+    The city flourished as a center of commerce between East and West, and became a multinational hub of finance and business by the 1930s.
+  `
 
   useEffect(() => {
     // Clean up the URL object when the component is unmounted or audioUrl changes
@@ -51,43 +57,45 @@ export default function Home() {
     saveAs(audioUrl, "speech.wav"); // This will save the file as "speech.mp3"
   };
 
-  // Assuming `openai.audio.speech.create` returns a stream or binary data
+  // Using OpenAI SDK via API route
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
     setAudioUrl(null);
     setStreamingProgress(null);
-    setUsageStats(null);
+
     try {
-      // Define the request headers
-      const headers = new Headers();
-      const apiUrl = apiUrlInput;
-      headers.append("Content-Type", "application/json");
-
-      // Define the request body
-      const body = JSON.stringify({
-        input: inputText,
-        voice: voice,
-        stream_format: stream_format,
+      // Call our Next.js API route
+      const response = await fetch('/api/openai-tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          apiUrl: apiUrlInput,
+          apiKey: '', // Your custom API might not need this
+          input: inputText,
+          voice: voice,
+          model: 'tts-1',
+          streaming: streaming,
+          responseFormat: streaming ? 'pcm' : 'wav',
+        }),
       });
-
-      // Make the fetch request to the OpenAI API
-      const response = await fetch(`${apiUrl}/v1/audio/speech`, {
-        method: "POST",
-        headers: headers,
-        body: body,
-      });
-
-
-      console.log(response);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const error = await response.json();
+          errorMessage = error.details || error.error || errorMessage;
+        } catch (e) {
+          console.error('Failed to parse error response:', e);
+        }
+        throw new Error(errorMessage);
       }
 
-      // Handle response based on stream_format
-      if (stream_format === "sse") {
-        // SSE streaming mode - play PCM audio with Web Audio API
+      // Handle streaming PCM response
+      if (streaming) {
+        // Initialize Web Audio API
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         audioContextRef.current = audioContext;
         nextStartTimeRef.current = audioContext.currentTime;
@@ -98,8 +106,9 @@ export default function Home() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         const audioChunks = [];
-        let buffer = "";
         let chunkCount = 0;
+        let pendingBytes = new Uint8Array(0); // Buffer for incomplete samples
+        let buffer = ''; // Buffer for incomplete SSE messages
 
         // Function to convert PCM int16 to float32
         const pcmToFloat32 = (int16Array) => {
@@ -112,8 +121,10 @@ export default function Home() {
 
         // Function to play an audio buffer
         const playAudioChunk = (pcmData) => {
+          if (pcmData.length === 0) return;
+
           // Convert bytes to Int16Array (PCM is 16-bit)
-          const int16Array = new Int16Array(pcmData.buffer);
+          const int16Array = new Int16Array(pcmData.buffer, pcmData.byteOffset, pcmData.length / 2);
           const float32Data = pcmToFloat32(int16Array);
 
           // Create AudioBuffer
@@ -133,53 +144,78 @@ export default function Home() {
           console.log(`Playing chunk ${chunkCount}, duration: ${audioBuffer.duration.toFixed(2)}s`);
         };
 
+        // Read SSE stream chunks
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            // Process any remaining bytes
+            if (pendingBytes.length >= 2) {
+              const alignedLength = Math.floor(pendingBytes.length / 2) * 2;
+              const finalChunk = pendingBytes.slice(0, alignedLength);
+              audioChunks.push(finalChunk);
+              playAudioChunk(finalChunk);
+            }
+            break;
+          }
 
-          // Decode the chunk and add to buffer
+          // Decode the chunk as text (SSE format)
           buffer += decoder.decode(value, { stream: true });
 
-          // Process complete lines
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || ""; // Keep incomplete line in buffer
+          // Process complete SSE messages (separated by \n\n)
+          const messages = buffer.split('\n\n');
+          buffer = messages.pop() || ''; // Keep incomplete message in buffer
 
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const jsonStr = line.slice(6); // Remove "data: " prefix
-              try {
-                const event = JSON.parse(jsonStr);
+          for (const message of messages) {
+            if (!message.trim()) continue;
 
-                if (event.type === "speech.audio.delta") {
-                  // Decode base64 PCM chunk
-                  const binaryString = atob(event.audio);
-                  const bytes = new Uint8Array(binaryString.length);
-                  for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i);
-                  }
+            // Parse SSE event
+            const lines = message.split('\n');
+            let eventData = null;
 
-                  console.log(`Chunk ${chunkCount + 1} received, size:`, bytes.length);
-                  audioChunks.push(bytes);
-                  chunkCount++;
-                  setStreamingProgress(chunkCount);
-
-                  // Play the chunk immediately
-                  playAudioChunk(bytes);
-                } else if (event.type === "speech.audio.done") {
-                  // Store usage stats
-                  console.log('Stream complete, usage:', event.usage);
-                  setUsageStats(event.usage);
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  eventData = JSON.parse(line.substring(6));
+                } catch (e) {
+                  console.error('Failed to parse SSE data:', e);
                 }
-              } catch (e) {
-                console.error("Failed to parse SSE event:", e);
+              }
+            }
+
+            // Extract base64 audio data
+            if (eventData && eventData.type === 'speech.audio.delta' && eventData.audio) {
+              // Decode base64 to binary
+              const binaryString = atob(eventData.audio);
+              const pcmData = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                pcmData[i] = binaryString.charCodeAt(i);
+              }
+
+              // Combine with pending bytes
+              const combined = new Uint8Array(pendingBytes.length + pcmData.length);
+              combined.set(pendingBytes, 0);
+              combined.set(pcmData, pendingBytes.length);
+
+              // Calculate how many complete 16-bit samples we have
+              const alignedLength = Math.floor(combined.length / 2) * 2;
+              const completeChunk = combined.slice(0, alignedLength);
+              pendingBytes = combined.slice(alignedLength);
+
+              if (completeChunk.length > 0) {
+                console.log(`Chunk ${chunkCount + 1} received, size:`, completeChunk.length);
+                audioChunks.push(completeChunk);
+                chunkCount++;
+                setStreamingProgress(chunkCount);
+
+                // Play the chunk immediately
+                playAudioChunk(completeChunk);
               }
             }
           }
         }
 
-        // Create WAV file for download (optional)
-        // We still create a blob URL for the audio element display/download
-        console.log('Creating audio from', audioChunks.length, 'chunks');
+        // Create WAV file for download
+        console.log('Creating WAV from', audioChunks.length, 'chunks');
         const totalSize = audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
         const concatenated = new Uint8Array(totalSize);
         let offset = 0;
@@ -188,7 +224,7 @@ export default function Home() {
           offset += chunk.length;
         }
 
-        // Create a simple WAV blob for download
+        // Create WAV blob
         const createWavBlob = (pcmData) => {
           const bytesPerSample = 2;
           const blockAlign = numChannels * bytesPerSample;
@@ -225,11 +261,10 @@ export default function Home() {
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
       } else {
-        // Regular audio format (non-streaming)
+        // Non-streaming: just get the blob (WAV format)
         const blob = await response.blob();
-        const audioUrl = URL.createObjectURL(blob);
-        setAudioUrl(audioUrl);
-        setUsageStats(null);
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
       }
     } catch (error) {
       console.error("Error:", error);
@@ -252,7 +287,7 @@ export default function Home() {
   };
 
   const handleStreamToggle = () => {
-    setStreamFormat(stream_format === "sse" ? "audio" : "sse");
+    setStreaming(!streaming);
   };
 
   return (
@@ -329,17 +364,17 @@ export default function Home() {
 
                 <FormControl>
                   <VStack align="start" spacing={0}>
-                    <FormLabel htmlFor="stream_format">Audio/SSE</FormLabel>
+                    <FormLabel htmlFor="streaming">Streaming</FormLabel>
                     <HStack align="center" h="100%" mx="0" mt="2">
                       <Switch
-                        id="stream_format"
+                        id="streaming"
                         colorScheme="blackAlpha"
-                        isChecked={stream_format === "sse"}
+                        isChecked={streaming}
                         onChange={handleStreamToggle}
-                        size="md" // Optional: if you want a larger switch
+                        size="md"
                       />
                       <FormHelperText textAlign="center" mt={"-1"}>
-                        {stream_format === "sse" ? "SSE" : "Audio"}
+                        {streaming ? "On" : "Off"}
                       </FormHelperText>
                     </HStack>
                   </VStack>
@@ -347,7 +382,6 @@ export default function Home() {
               </Grid>
 
               <FormControl isRequired>
-                <FormLabel htmlFor="input-text">Input Text</FormLabel>
                 <Textarea
                   id="input-text"
                   placeholder="Enter the text you want to convert to speech"
@@ -357,14 +391,41 @@ export default function Home() {
                   maxLength={4096}
                   borderColor="black"
                 />
+                
+              </FormControl>
+
+              <Box width="full">
+                <HStack spacing={2} flexWrap="wrap" mb={2}>
+                  <Text fontSize="xs" color="gray.600">Examples:</Text>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setInputText("Hello! Welcome to Open Audio. This is a text-to-speech demo powered by KaniTTS.")}
+                  >
+                    Welcome
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setInputText(longText)}
+                  >
+                    Long text
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setInputText("In the year 2025, artificial intelligence (AI) continues to reshape the world. From its nascent stages in the 1950s, when pioneers like Alan Turing laid the groundwork, to the sophisticated systems of today, AI has evolved into a transformative force. Machine learning algorithms, neural networks, and large language models have become integral to industries ranging from healthcare to finance.")}
+                  >
+                    Medium text
+                  </Button>
+                </HStack>
                 <Box textAlign="right" fontSize="sm">
                   {inputText.length} / 2048
                 </Box>
-              </FormControl>
+              </Box>
 
               <HStack width="full" justifyContent="space-between">
                 <FormControl isRequired width="45%">
-                  <FormLabel htmlFor="voice">Voice</FormLabel>
                   <Select
                     id="voice"
                     value={voice}
@@ -377,19 +438,17 @@ export default function Home() {
                     _hover={{ borderColor: "gray.400" }} // Optional: style for hover state
                   >
                     {/* List of supported voices */}
-                    <option value="random">Random</option>
-                    <option value="alloy">Alloy</option>
-                    <option value="echo">Echo</option>
-                    <option value="fable">Fable</option>
-                    <option value="onyx">Onyx</option>
-                    <option value="nova">Nova</option>
-                    <option value="shimmer">Shimmer</option>
+                    <option value="andrew">Andrew</option>
+                    <option value="katie">Katie</option>
+                    <option value="david">David</option>
+                    <option value="puck">Puck</option>
+                    <option value="kore">Kore</option>
+                    <option value="simon">Simon</option>
+                    <option value="jenny">Jenny</option>
                   </Select>
                 </FormControl>
-              </HStack>
 
-              <Button
-                size="lg"
+                <Button
                 bg="black"
                 color={"white"}
                 colorScheme="black"
@@ -400,6 +459,7 @@ export default function Home() {
               >
                 Create Speech
               </Button>
+              </HStack>
 
               {isSubmitting && (
                 <VStack spacing={2}>
@@ -410,7 +470,7 @@ export default function Home() {
                     color="black"
                     size="md"
                   />
-                  {stream_format === "sse" && streamingProgress !== null && (
+                  {streaming && streamingProgress !== null && (
                     <Text fontSize="sm" color="gray.600">
                       Streaming chunks: {streamingProgress}
                     </Text>
@@ -423,22 +483,6 @@ export default function Home() {
                     Your browser does not support the audio element.
                   </audio>
                   <Button onClick={handleDownload}>Download WAV</Button>
-                  {usageStats && (
-                    <Box
-                      p={3}
-                      bg="gray.50"
-                      borderRadius="md"
-                      width="full"
-                      fontSize="sm"
-                    >
-                      <Text fontWeight="bold" mb={1}>
-                        Usage Statistics:
-                      </Text>
-                      <Text>Input tokens: {usageStats.input_tokens}</Text>
-                      <Text>Output tokens: {usageStats.output_tokens}</Text>
-                      <Text>Total tokens: {usageStats.total_tokens}</Text>
-                    </Box>
-                  )}
                 </>
               )}
             </VStack>
