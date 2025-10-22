@@ -1,3 +1,5 @@
+![Open-Audio TTS Demo](public/demo.png)
+
 # Open-Audio TTS
 
 <div style='{"display": "flex"}'>
@@ -37,10 +39,6 @@ To use Open-Audio TTS, simply:
 3. Select the voice.
 4. Click on 'Create Speech' to generate the audio.
 5. Once the audio is generated, use the controls to play it or click 'Download WAV' to save it.
-
-# Demo
-
-![Open-Audio TTS Demo](public/demo.png)
 
 ## Contributing
 
