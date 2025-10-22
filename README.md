@@ -1,6 +1,10 @@
 # Open-Audio TTS
 
-[![](https://dcbadge.limes.pink/api/server/https://discord.gg/4fZ4mjD3)](https://discord.gg/4fZ4mjD3)
+<div style='{"display": "flex"}'>
+
+[![](https://dcbadge.limes.pink/api/server/https://discord.gg/NzP3rjB4SB?style=flat)](https://discord.gg/NzP3rjB4SB)  [![Deploy with Vercel](https://img.shields.io/badge/Vercel-000000?style=flat&logo=vercel&logoColor=white)](https://vercel.com/new/clone?repository-url=https://github.com/nineninesix-ai/open-audio)
+
+</div>
 
 Open-Audio TTS is a web application that allows users to convert text into natural-sounding speech. Powered by KaniTTS text-to-speech models, this tool offers an intuitive user interface built with Chakra UI, providing a seamless experience for generating and downloading speech audio files.
 
@@ -8,16 +12,10 @@ Open-Audio TTS is a web application that allows users to convert text into natur
 
 - **Text-to-Speech**: Convert any text into speech.
 - **Customizable Voices**: Choose from a variety of voices to find the one that best suits your needs.
-- **BYO**: Bring your Own (BYO) API url, no data is stored on server side.
+- **BYO**: Bring your Own (BYO) API url.
 - **Downloadable Audio**: Easily download the generated speech as an MP3 file directly from the browser.
 - **User-Friendly Interface**: Built with responsiveness in mind, offering a comfortable experience across different devices.
 
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/nineninesix-ai/open-audio)
 
 ## Installation
 
@@ -59,8 +57,3 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 - <a target="_blank" href="https://icons8.com/icon/PgPOu9C2G4Dq/speech-to-text">Speech To Text</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
 - The repo was forked from [Justmalhar/open-audio](https://github.com/Justmalhar/open-audio)
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
