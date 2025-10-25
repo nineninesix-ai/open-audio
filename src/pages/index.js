@@ -42,6 +42,17 @@ export default function Home() {
     The city flourished as a center of commerce between East and West, and became a multinational hub of finance and business by the 1930s.
   `
 
+  const alice = `In THAT direction, the Cat said, waving its right paw round, lives a Hatter:  and in THAT direction, waving the other paw, lives a March Hare.  Visit either you like:  they're both mad.
+
+But I don't want to go among mad people, Alice remarked.
+
+ Oh, you can't help that, said the Cat:  we're all mad here.
+I'm mad.  You're mad.
+
+How do you know I'm mad? said Alice.
+
+You must be, said the Cat, or you wouldn't have come here.
+`
   useEffect(() => {
     // Clean up the URL object when the component is unmounted or audioUrl changes
     return () => {
@@ -400,7 +411,7 @@ export default function Home() {
                   <Button
                     size="xs"
                     variant="outline"
-                    onClick={() => setInputText("Hello! Welcome to Open Audio. This is a text-to-speech demo powered by KaniTTS.")}
+                    onClick={() => setInputText("Hello! Welcome to Open Audio. This is a text-to-speech demo powered by Kani TTS.")}
                   >
                     Welcome
                   </Button>
@@ -414,9 +425,9 @@ export default function Home() {
                   <Button
                     size="xs"
                     variant="outline"
-                    onClick={() => setInputText("In the year 2025, artificial intelligence (AI) continues to reshape the world. From its nascent stages in the 1950s, when pioneers like Alan Turing laid the groundwork, to the sophisticated systems of today, AI has evolved into a transformative force. Machine learning algorithms, neural networks, and large language models have become integral to industries ranging from healthcare to finance.")}
+                    onClick={() => setInputText(alice)}
                   >
-                    Medium text
+                    Complex text
                   </Button>
                 </HStack>
                 <Box textAlign="right" fontSize="sm">
@@ -440,11 +451,6 @@ export default function Home() {
                     {/* List of supported voices */}
                     <option value="andrew">Andrew</option>
                     <option value="katie">Katie</option>
-                    <option value="david">David</option>
-                    <option value="puck">Puck</option>
-                    <option value="kore">Kore</option>
-                    <option value="simon">Simon</option>
-                    <option value="jenny">Jenny</option>
                   </Select>
                 </FormControl>
 
